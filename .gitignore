@@ -5,3 +5,4 @@ out/
 firmware.bin
 .pio/
 .vscode/
+/build/
