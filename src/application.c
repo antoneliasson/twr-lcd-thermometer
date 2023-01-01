@@ -3,8 +3,21 @@
 // Maximum age of received measurements that are considered valid and should be displayed
 const unsigned int STALE_MEASUREMENT_THRESHOLD = 60 * 60 * 1000;
 
+#define BATTERY_PUBLISH_INTERVAL (60 * 60 * 1000)
+#define TEMPERATURE_PUBLISH_INTERVAL (15 * 60 * 1000)
+#define TEMPERATURE_PUBLISH_VALUE_CHANGE 1.0f
+#define TEMPERATURE_MEASURE_INTERVAL (5 * 1000)
+
+typedef struct
+{
+    uint8_t channel;
+    float value;
+    twr_tick_t next_pub;
+} event_param_t;
+
 // Thermometer instance
 twr_tmp112_t tmp112;
+event_param_t temperature_event_param;
 
 static twr_scheduler_task_id_t display_update_task;
 static twr_gfx_t *gfx;
@@ -67,18 +80,26 @@ static void radio_update_sensor(uint64_t *id, const char *topic, void *value, vo
 
 void tmp112_event_handler(twr_tmp112_t *self, twr_tmp112_event_t event, void *event_param)
 {
+    event_param_t *param = (event_param_t *)event_param;
+
     if (event == TWR_TMP112_EVENT_UPDATE)
     {
-        float celsius;
+        float value;
 
-        if (twr_tmp112_get_temperature_celsius(self, &celsius))
+        if (twr_tmp112_get_temperature_celsius(self, &value))
         {
-            twr_log_debug("APP: temperature: %.2f °C", celsius);
+            if ((fabsf(value - param->value) >= TEMPERATURE_PUBLISH_VALUE_CHANGE) || (param->next_pub < twr_scheduler_get_spin_tick()))
+            {
+                twr_log_debug("APP: temperature: %.2f °C", value);
 
-            twr_radio_pub_temperature(TWR_RADIO_PUB_CHANNEL_R1_I2C0_ADDRESS_ALTERNATE, &celsius);
-            display_data.in_temp = celsius;
-            display_data.in_temp_last_timestamp = twr_tick_get();
-            twr_scheduler_plan_now(display_update_task);
+                twr_radio_pub_temperature(param->channel, &value);
+                param->value = value;
+                param->next_pub = twr_scheduler_get_spin_tick() + TEMPERATURE_PUBLISH_INTERVAL;
+
+                display_data.in_temp = value;
+                display_data.in_temp_last_timestamp = twr_tick_get();
+                twr_scheduler_plan_now(display_update_task);
+            }
         }
     }
 }
@@ -131,9 +152,10 @@ void application_init(void)
     display_update_task = twr_scheduler_register(display_update, NULL, 0);
 
     // Initialize thermometer on core module
+    temperature_event_param.channel = TWR_RADIO_PUB_CHANNEL_R1_I2C0_ADDRESS_ALTERNATE;
     twr_tmp112_init(&tmp112, TWR_I2C_I2C0, TWR_TAG_TEMPERATURE_I2C_ADDRESS_ALTERNATE);
-    twr_tmp112_set_event_handler(&tmp112, tmp112_event_handler, NULL);
-    twr_tmp112_set_update_interval(&tmp112, 10000);
+    twr_tmp112_set_event_handler(&tmp112, tmp112_event_handler, &temperature_event_param);
+    twr_tmp112_set_update_interval(&tmp112, TEMPERATURE_MEASURE_INTERVAL);
 
     twr_radio_init(TWR_RADIO_MODE_NODE_SLEEPING);
     twr_radio_set_subs((twr_radio_sub_t *) subs, sizeof(subs)/sizeof(twr_radio_sub_t));
