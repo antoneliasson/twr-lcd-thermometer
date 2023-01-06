@@ -19,6 +19,30 @@ typedef struct
 twr_tmp112_t tmp112;
 event_param_t temperature_event_param;
 
+// Rotation support
+static twr_lis2dh12_t lis2dh12;
+static twr_dice_t dice;
+static twr_dice_face_t face = TWR_DICE_FACE_UNKNOWN;
+static twr_module_lcd_rotation_t rotation = TWR_MODULE_LCD_ROTATION_0;
+
+#if CORE_R == 2
+static twr_module_lcd_rotation_t face_2_lcd_rotation_lut[7] =
+{
+    [TWR_DICE_FACE_2] = TWR_MODULE_LCD_ROTATION_270,
+    [TWR_DICE_FACE_3] = TWR_MODULE_LCD_ROTATION_180,
+    [TWR_DICE_FACE_4] = TWR_MODULE_LCD_ROTATION_0,
+    [TWR_DICE_FACE_5] = TWR_MODULE_LCD_ROTATION_90
+};
+#else
+static twr_module_lcd_rotation_t face_2_lcd_rotation_lut[7] =
+{
+    [TWR_DICE_FACE_2] = TWR_MODULE_LCD_ROTATION_90,
+    [TWR_DICE_FACE_3] = TWR_MODULE_LCD_ROTATION_0,
+    [TWR_DICE_FACE_4] = TWR_MODULE_LCD_ROTATION_180,
+    [TWR_DICE_FACE_5] = TWR_MODULE_LCD_ROTATION_270
+};
+#endif
+
 static twr_scheduler_task_id_t display_update_task;
 static twr_gfx_t *gfx;
 
@@ -78,6 +102,28 @@ static void radio_update_sensor(uint64_t *id, const char *topic, void *value, vo
     twr_scheduler_plan_now(display_update_task);
 }
 
+static void lis2dh12_event_handler(twr_lis2dh12_t *self, twr_lis2dh12_event_t event, void *event_param)
+{
+    (void) event_param;
+
+    if (event == TWR_LIS2DH12_EVENT_UPDATE)
+    {
+        twr_lis2dh12_result_g_t result;
+
+        twr_lis2dh12_get_result_g(self, &result);
+        twr_dice_feed_vectors(&dice, result.x_axis, result.y_axis, result.z_axis);
+        face = twr_dice_get_face(&dice);
+
+        twr_log_debug("%s: face: %d (x=%+.03f y=%+.03f z=%+.03f)", __func__, face, result.x_axis, result.y_axis, result.z_axis);
+
+        if (face > TWR_DICE_FACE_1 && face < TWR_DICE_FACE_6)
+        {
+            rotation = face_2_lcd_rotation_lut[face];
+            twr_scheduler_plan_now(display_update_task);
+        }
+    }
+}
+
 void tmp112_event_handler(twr_tmp112_t *self, twr_tmp112_event_t event, void *event_param)
 {
     event_param_t *param = (event_param_t *)event_param;
@@ -128,6 +174,9 @@ static void display_update(void *param)
     (void)param;
     // twr_log_debug("%s enter", __func__);
     twr_system_pll_enable();
+
+    twr_module_lcd_set_rotation(rotation);
+
     if (!twr_module_lcd_is_ready())
     {
         twr_log_debug("%s not ready", __func__);
@@ -150,6 +199,13 @@ void application_init(void)
     gfx = twr_module_lcd_get_gfx();
 
     display_update_task = twr_scheduler_register(display_update, NULL, 0);
+
+    // Initialize Accelerometer
+    twr_dice_init(&dice, TWR_DICE_FACE_UNKNOWN);
+    twr_lis2dh12_init(&lis2dh12, TWR_I2C_I2C0, 0x19);
+    twr_lis2dh12_set_resolution(&lis2dh12, TWR_LIS2DH12_RESOLUTION_8BIT);
+    twr_lis2dh12_set_update_interval(&lis2dh12, 5 * 1000);
+    twr_lis2dh12_set_event_handler(&lis2dh12, lis2dh12_event_handler, NULL);
 
     // Initialize thermometer on core module
     temperature_event_param.channel = TWR_RADIO_PUB_CHANNEL_R1_I2C0_ADDRESS_ALTERNATE;
