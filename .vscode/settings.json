@@ -30,6 +30,7 @@
     "terminal.integrated.shell.windows": "C:\\Windows\\sysnative\\cmd.exe",
     "C_Cpp.default.configurationProvider": "ms-vscode.cmake-tools",
     "files.associations": {
-        "twr_dice.h": "c"
+        "twr_dice.h": "c",
+        "twr_lis2dh12.h": "c"
     }
 }
