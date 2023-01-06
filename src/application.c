@@ -22,7 +22,6 @@ event_param_t temperature_event_param;
 // Rotation support
 static twr_lis2dh12_t lis2dh12;
 static twr_dice_t dice;
-static twr_dice_face_t face = TWR_DICE_FACE_UNKNOWN, oldface = TWR_DICE_FACE_UNKNOWN;
 static twr_module_lcd_rotation_t rotation = TWR_MODULE_LCD_ROTATION_0;
 
 #if CORE_R == 2
@@ -144,28 +143,30 @@ static void lis2dh12_event_handler(twr_lis2dh12_t *self, twr_lis2dh12_event_t ev
     if (event == TWR_LIS2DH12_EVENT_UPDATE)
     {
         twr_lis2dh12_result_g_t result;
+        twr_dice_face_t new_face, old_face;
 
+        old_face = twr_dice_get_face(&dice);
         twr_lis2dh12_get_result_g(self, &result);
         twr_dice_feed_vectors(&dice, result.x_axis, result.y_axis, result.z_axis);
-        face = twr_dice_get_face(&dice);
+        new_face = twr_dice_get_face(&dice);
 
-        twr_log_debug("%s: face: %d (x=%+.03f y=%+.03f z=%+.03f)", __func__, face, result.x_axis, result.y_axis, result.z_axis);
+        twr_log_debug("%s: face: %d->%d (x=%+.03f y=%+.03f z=%+.03f)", __func__, old_face, new_face, result.x_axis, result.y_axis, result.z_axis);
 
-        if (face != oldface)
+        if (new_face != old_face)
         {
-            twr_log_debug("%s: face change: %d->%d", __func__, oldface, face);
-            oldface = face;
-            alarm_from_die_face(&alarm1, face);
+            old_face = new_face;
+            alarm_from_die_face(&alarm1, new_face);
+            // Set new alarm for when the new orientation is left. This will
+            // trigger an immediate second measurement and update event.
             twr_lis2dh12_set_alarm(self, &alarm1);
+            twr_log_debug("%s: next alarm when leaving face %d", __func__, new_face);
 
-            if (face > TWR_DICE_FACE_1 && face < TWR_DICE_FACE_6)
+            if (new_face > TWR_DICE_FACE_1 && new_face < TWR_DICE_FACE_6)
             {
-                rotation = face_2_lcd_rotation_lut[face];
+                rotation = face_2_lcd_rotation_lut[new_face];
                 twr_scheduler_plan_now(display_update_task);
             }
         }
-    } else if (event == TWR_LIS2DH12_EVENT_ALARM) {
-        twr_log_debug("%s: alarm", __func__);
     }
 }
 
@@ -255,8 +256,6 @@ void application_init(void)
     twr_lis2dh12_set_event_handler(&lis2dh12, lis2dh12_event_handler, NULL);
     alarm1.threshold = 0.5;
     twr_lis2dh12_set_alarm(&lis2dh12, &alarm1);
-
-    //twr_lis2dh12_measure(&lis2dh12);
 
     // Initialize thermometer on core module
     temperature_event_param.channel = TWR_RADIO_PUB_CHANNEL_R1_I2C0_ADDRESS_ALTERNATE;
