@@ -153,6 +153,7 @@ static void lis2dh12_event_handler(twr_lis2dh12_t *self, twr_lis2dh12_event_t ev
 
         if (face != oldface)
         {
+            twr_log_debug("%s: face change: %d->%d", __func__, oldface, face);
             oldface = face;
             alarm_from_die_face(&alarm1, face);
             twr_lis2dh12_set_alarm(self, &alarm1);
@@ -244,15 +245,15 @@ void application_init(void)
 
     display_update_task = twr_scheduler_register(display_update, NULL, 0);
 
-    // Initialize Accelerometer
+    // Initialize Accelerometer. Not setting an update interval disables
+    // periodic measurements. Setting an alarm triggers the first
+    // measurement. We exploit that an update event is triggered when
+    // each measurement is done.
     twr_dice_init(&dice, TWR_DICE_FACE_UNKNOWN);
     twr_lis2dh12_init(&lis2dh12, TWR_I2C_I2C0, 0x19);
     twr_lis2dh12_set_resolution(&lis2dh12, TWR_LIS2DH12_RESOLUTION_8BIT);
-    //twr_lis2dh12_set_update_interval(&lis2dh12, 1000);
     twr_lis2dh12_set_event_handler(&lis2dh12, lis2dh12_event_handler, NULL);
-    //alarm1.x_high = true;
     alarm1.threshold = 0.5;
-    //alarm1.duration = 100;
     twr_lis2dh12_set_alarm(&lis2dh12, &alarm1);
 
     //twr_lis2dh12_measure(&lis2dh12);
