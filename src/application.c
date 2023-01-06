@@ -22,7 +22,7 @@ event_param_t temperature_event_param;
 // Rotation support
 static twr_lis2dh12_t lis2dh12;
 static twr_dice_t dice;
-static twr_dice_face_t face = TWR_DICE_FACE_UNKNOWN;
+static twr_dice_face_t face = TWR_DICE_FACE_UNKNOWN, oldface = TWR_DICE_FACE_UNKNOWN;
 static twr_module_lcd_rotation_t rotation = TWR_MODULE_LCD_ROTATION_0;
 
 #if CORE_R == 2
@@ -102,6 +102,41 @@ static void radio_update_sensor(uint64_t *id, const char *topic, void *value, vo
     twr_scheduler_plan_now(display_update_task);
 }
 
+twr_lis2dh12_alarm_t alarm1;
+
+static void alarm_from_die_face(twr_lis2dh12_alarm_t *alarm, twr_dice_face_t f)
+{
+    alarm->x_low = false;
+    alarm->y_low = false;
+    alarm->z_low = false;
+
+    switch (f) {
+        case TWR_DICE_FACE_2:
+        alarm->x_low = true;
+        return;
+        case TWR_DICE_FACE_3:
+        alarm->y_low = true;
+        return;
+        case TWR_DICE_FACE_4:
+        alarm->y_low = true;
+        return;
+        case TWR_DICE_FACE_5:
+        alarm->x_low = true;
+        return;
+
+        case TWR_DICE_FACE_1:
+        alarm->z_low = true;
+        return;
+        case TWR_DICE_FACE_6:
+        alarm->z_low = true;
+        return;
+        case TWR_DICE_FACE_UNKNOWN:
+        default:
+        application_error(TWR_ERROR_INVALID_PARAMETER);
+        return;
+    }
+}
+
 static void lis2dh12_event_handler(twr_lis2dh12_t *self, twr_lis2dh12_event_t event, void *event_param)
 {
     (void) event_param;
@@ -116,11 +151,20 @@ static void lis2dh12_event_handler(twr_lis2dh12_t *self, twr_lis2dh12_event_t ev
 
         twr_log_debug("%s: face: %d (x=%+.03f y=%+.03f z=%+.03f)", __func__, face, result.x_axis, result.y_axis, result.z_axis);
 
-        if (face > TWR_DICE_FACE_1 && face < TWR_DICE_FACE_6)
+        if (face != oldface)
         {
-            rotation = face_2_lcd_rotation_lut[face];
-            twr_scheduler_plan_now(display_update_task);
+            oldface = face;
+            alarm_from_die_face(&alarm1, face);
+            twr_lis2dh12_set_alarm(self, &alarm1);
+
+            if (face > TWR_DICE_FACE_1 && face < TWR_DICE_FACE_6)
+            {
+                rotation = face_2_lcd_rotation_lut[face];
+                twr_scheduler_plan_now(display_update_task);
+            }
         }
+    } else if (event == TWR_LIS2DH12_EVENT_ALARM) {
+        twr_log_debug("%s: alarm", __func__);
     }
 }
 
@@ -204,8 +248,14 @@ void application_init(void)
     twr_dice_init(&dice, TWR_DICE_FACE_UNKNOWN);
     twr_lis2dh12_init(&lis2dh12, TWR_I2C_I2C0, 0x19);
     twr_lis2dh12_set_resolution(&lis2dh12, TWR_LIS2DH12_RESOLUTION_8BIT);
-    twr_lis2dh12_set_update_interval(&lis2dh12, 5 * 1000);
+    //twr_lis2dh12_set_update_interval(&lis2dh12, 1000);
     twr_lis2dh12_set_event_handler(&lis2dh12, lis2dh12_event_handler, NULL);
+    //alarm1.x_high = true;
+    alarm1.threshold = 0.5;
+    //alarm1.duration = 100;
+    twr_lis2dh12_set_alarm(&lis2dh12, &alarm1);
+
+    //twr_lis2dh12_measure(&lis2dh12);
 
     // Initialize thermometer on core module
     temperature_event_param.channel = TWR_RADIO_PUB_CHANNEL_R1_I2C0_ADDRESS_ALTERNATE;
