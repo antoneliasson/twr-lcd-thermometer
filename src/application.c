@@ -21,6 +21,7 @@ event_param_t temperature_event_param;
 
 // Rotation support
 static twr_lis2dh12_t lis2dh12;
+static twr_lis2dh12_alarm_t alarm1;
 static twr_dice_t dice;
 static twr_module_lcd_rotation_t rotation = TWR_MODULE_LCD_ROTATION_0;
 
@@ -100,8 +101,6 @@ static void radio_update_sensor(uint64_t *id, const char *topic, void *value, vo
 
     twr_scheduler_plan_now(display_update_task);
 }
-
-twr_lis2dh12_alarm_t alarm1;
 
 static void alarm_from_die_face(twr_lis2dh12_alarm_t *alarm, twr_dice_face_t f)
 {
@@ -252,7 +251,11 @@ void application_init(void)
     // each measurement is done.
     twr_dice_init(&dice, TWR_DICE_FACE_UNKNOWN);
     twr_lis2dh12_init(&lis2dh12, TWR_I2C_I2C0, 0x19);
+    // Low resolution is fine -- we only need to detect the general orientation
     twr_lis2dh12_set_resolution(&lis2dh12, TWR_LIS2DH12_RESOLUTION_8BIT);
+    /* The scaling calculation in twr_lis2dh12_set_alarm is only correct in 4G mode
+     * so use that until fixed. */
+    twr_lis2dh12_set_scale(&lis2dh12, TWR_LIS2DH12_SCALE_4G);
     twr_lis2dh12_set_event_handler(&lis2dh12, lis2dh12_event_handler, NULL);
     alarm1.threshold = 0.5;
     twr_lis2dh12_set_alarm(&lis2dh12, &alarm1);
