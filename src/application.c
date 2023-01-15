@@ -154,6 +154,9 @@ static void lis2dh12_event_handler(twr_lis2dh12_t *self, twr_lis2dh12_event_t ev
         if (new_face != old_face)
         {
             old_face = new_face;
+            // We never go from a known dice face to an unknown dice face, so
+            // the face must now be known if it wasn't before; disable periodic updates
+            twr_lis2dh12_set_update_interval(&lis2dh12, TWR_TICK_INFINITY);
             alarm_from_die_face(&alarm1, new_face);
             // Set new alarm for when the new orientation is left. This will
             // trigger an immediate second measurement and update event.
@@ -245,10 +248,10 @@ void application_init(void)
 
     display_update_task = twr_scheduler_register(display_update, NULL, 0);
 
-    // Initialize Accelerometer. Not setting an update interval disables
-    // periodic measurements. Setting an alarm triggers the first
-    // measurement. We exploit that an update event is triggered when
-    // each measurement is done.
+    /* Initialize accelerometer. Setting an alarm triggers the first
+     * measurement (as does setting a periodic update interval). We exploit
+     * that an update event is triggered when each measurement is done.
+     */
     twr_dice_init(&dice, TWR_DICE_FACE_UNKNOWN);
     twr_lis2dh12_init(&lis2dh12, TWR_I2C_I2C0, 0x19);
     // Low resolution is fine -- we only need to detect the general orientation
@@ -259,6 +262,9 @@ void application_init(void)
     twr_lis2dh12_set_event_handler(&lis2dh12, lis2dh12_event_handler, NULL);
     alarm1.threshold = 0.5;
     twr_lis2dh12_set_alarm(&lis2dh12, &alarm1);
+    // The initial dice face may be unknown if the device is not laying flat
+    // after reset. Check periodically until it is known.
+    twr_lis2dh12_set_update_interval(&lis2dh12, 5000);
 
     // Initialize thermometer on core module
     temperature_event_param.channel = TWR_RADIO_PUB_CHANNEL_R1_I2C0_ADDRESS_ALTERNATE;
