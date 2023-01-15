@@ -196,6 +196,28 @@ void tmp112_event_handler(twr_tmp112_t *self, twr_tmp112_event_t event, void *ev
     }
 }
 
+static void battery_event_handler(twr_module_battery_event_t event, void *event_param)
+{
+    (void) event_param;
+    float voltage;
+
+    if (event == TWR_MODULE_BATTERY_EVENT_UPDATE)
+    {
+        if (twr_module_battery_get_voltage(&voltage))
+        {
+            twr_radio_pub_battery(&voltage);
+        }
+    }
+    else if (event == TWR_MODULE_BATTERY_EVENT_LEVEL_LOW)
+    {
+        twr_radio_pub_string("battery/level", "LOW");
+    }
+    else if (event == TWR_MODULE_BATTERY_EVENT_LEVEL_CRITICAL)
+    {
+        twr_radio_pub_string("battery/level", "CRITICAL");
+    }
+}
+
 static void draw_lcd_weather_page(void)
 {
     twr_gfx_clear(gfx);
@@ -269,6 +291,10 @@ void application_init(void)
     twr_tmp112_init(&tmp112, TWR_I2C_I2C0, TWR_TAG_TEMPERATURE_I2C_ADDRESS_ALTERNATE);
     twr_tmp112_set_event_handler(&tmp112, tmp112_event_handler, &temperature_event_param);
     twr_tmp112_set_update_interval(&tmp112, TEMPERATURE_MEASURE_INTERVAL);
+
+    twr_module_battery_init();
+    twr_module_battery_set_event_handler(battery_event_handler, NULL);
+    twr_module_battery_set_update_interval(BATTERY_PUBLISH_INTERVAL);
 
     twr_radio_init(TWR_RADIO_MODE_NODE_SLEEPING);
     twr_radio_set_subs((twr_radio_sub_t *) subs, sizeof(subs)/sizeof(twr_radio_sub_t));
