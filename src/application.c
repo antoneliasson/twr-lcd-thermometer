@@ -153,7 +153,6 @@ static void lis2dh12_event_handler(twr_lis2dh12_t *self, twr_lis2dh12_event_t ev
 
         if (new_face != old_face)
         {
-            old_face = new_face;
             // We never go from a known dice face to an unknown dice face, so
             // the face must now be known if it wasn't before; disable periodic updates
             twr_lis2dh12_set_update_interval(&lis2dh12, TWR_TICK_INFINITY);
@@ -161,7 +160,6 @@ static void lis2dh12_event_handler(twr_lis2dh12_t *self, twr_lis2dh12_event_t ev
             // Set new alarm for when the new orientation is left. This will
             // trigger an immediate second measurement and update event.
             twr_lis2dh12_set_alarm(self, &alarm1);
-            twr_log_debug("%s: next alarm when leaving face %d", __func__, new_face);
 
             if (new_face > TWR_DICE_FACE_1 && new_face < TWR_DICE_FACE_6)
             {
